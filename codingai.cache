@@ -1,0 +1,16 @@
+nl.mihaly.nextpnrs.NextPrimeNumbers
+This class must generate the next N prime numbers starting from a given integer value.
+The class has two fields:
+- start: the integer value from which to begin searching for primes (inclusive if start itself is prime).
+- count: the number of prime numbers to return.
+
+The class must expose a method that returns the next N prime numbers as a JSON list of integers.
+The JSON must be valid and contain only the prime numbers in order.
+
+Examples:
+If start = 10 and count = 3, the result should be [11,13,17].
+If start = 1 and count = 5, the result should be [2,3,5,7,11].
+If start = 7 and count = 4, the result should be [7,11,13,17].
+
+The class must not print anything and must not read input.
+It must only compute and return the JSON string.
