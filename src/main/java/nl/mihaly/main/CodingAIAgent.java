@@ -22,6 +22,8 @@ public class CodingAIAgent {
     private final OllamaClient ollama;
     private final JavaCodeExtractor extractor;
     private final ClassWriter writer;
+    private final PromptBuilder promptBuilder;
+    private final PomFixer pomFixer;
 
     public CodingAIAgent(Consumer<String> logger,
                          String specification,
@@ -37,6 +39,8 @@ public class CodingAIAgent {
         this.ollama = new OllamaClient(logger);
         this.extractor = new JavaCodeExtractor(logger);
         this.writer = new ClassWriter(logger);
+        this.promptBuilder = new PromptBuilder();
+        this.pomFixer = new PomFixer(logger, extractor, promptBuilder, className, packageName);
     }
 
     /**
@@ -83,10 +87,10 @@ public class CodingAIAgent {
             // NEW LOGIC: Only fix POM if the class already exists AND
             // the error is a real dependency resolution failure.
             // ------------------------------------------------------------
-            if (needsPomFix(projectRoot, lastTestOutput)) {
+            if (pomFixer.needsPomFix(projectRoot, lastTestOutput)) {
                 logger.accept("Dependency resolution errors detected. Attempting to fix pom.xml...");
 
-                if (fixPom(projectRoot, lastTestOutput)) {
+                if (pomFixer.fixPom(projectRoot, lastTestOutput)) {
                     logger.accept("pom.xml updated. Re-running tests...");
                     continue;
                 } else {
@@ -134,55 +138,6 @@ public class CodingAIAgent {
         logger.accept("Switching to deepseek-r1-70b for final attempt...");
 
         return runFallbackModel(projectRoot, lastTestOutput, testSource);
-    }
-
-    /**
-     * NEW: Only fix POM if:
-     * 1. The class already exists (otherwise it's a compile error, not a dependency error)
-     * 2. The test output contains REAL dependency resolution failures
-     */
-    private boolean needsPomFix(Path projectRoot, String output) {
-        // If the class does not exist yet → NEVER fix the pom
-        Path classPath = projectRoot
-                .resolve("src/main/java")
-                .resolve(packageName.replace('.', '/'))
-                .resolve(className + ".java");
-
-        if (!Files.exists(classPath)) {
-            return false;
-        }
-
-        String lower = output.toLowerCase();
-
-        // True dependency resolution failures
-        if (lower.contains("could not resolve dependencies")) return true;
-        if (lower.contains("missing artifact")) return true;
-        if (lower.contains("was not found in") && lower.contains("repository")) return true;
-        if (lower.contains("failed to read artifact descriptor")) return true;
-        if (lower.contains("dependencyresolutionexception")) return true;
-
-        return false;
-    }
-
-    private boolean fixPom(Path projectRoot, String testOutput) {
-        String prompt = Texts.POM_PROMPT.formatted(testOutput);
-        logger.accept("POM fix prompt:");
-        logger.accept(prompt);
-
-        String aiResponse = ollama.call("deepseek-coder-v2:16b", prompt);
-        logger.accept("POM fix AI response:");
-        logger.accept(aiResponse);
-
-        String depsXml = extractor.extractDependencies(aiResponse);
-        if (depsXml == null) {
-            logger.accept("No <dependency> blocks found in AI response.");
-            return false;
-        }
-
-        PomWriter pomWriter = new PomWriter(logger);
-        pomWriter.addDependencies(projectRoot, depsXml);
-
-        return true;
     }
 
     private String loadTestSource(Path projectRoot) {

@@ -1,5 +1,6 @@
 package nl.mihaly.main;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
@@ -8,21 +9,53 @@ public class PomFixer {
     private final Consumer<String> logger;
     private final JavaCodeExtractor extractor;
     private final PromptBuilder prompts;
+    private final OllamaClient ollama;
+    private final String className;
+    private final String packageName;
 
-    public PomFixer(Consumer<String> logger, JavaCodeExtractor extractor, PromptBuilder prompts) {
+    public PomFixer(Consumer<String> logger,
+                    JavaCodeExtractor extractor,
+                    PromptBuilder prompts,
+                    String className,
+                    String packageName) {
         this.logger = logger;
         this.extractor = extractor;
         this.prompts = prompts;
+        this.ollama = new OllamaClient(logger);
+        this.className = className;
+        this.packageName = packageName;
     }
 
-    public boolean needsPomFix(String testOutput) {
-        return testOutput.contains("package") && testOutput.contains("does not exist")
-                || testOutput.contains("cannot find symbol")
-                || testOutput.contains("Failed to execute goal") && testOutput.contains("dependencies");
+    /**
+     * NEW: Only fix POM if:
+     * 1. The class already exists (otherwise it's a compile error, not a dependency error)
+     * 2. The test output contains REAL dependency resolution failures
+     */
+    public boolean needsPomFix(Path projectRoot, String output) {
+        // If the class does not exist yet → NEVER fix the pom
+        Path classPath = projectRoot
+                .resolve("src/main/java")
+                .resolve(packageName.replace('.', '/'))
+                .resolve(className + ".java");
+
+        if (!Files.exists(classPath)) {
+            return false;
+        }
+
+        String lower = output.toLowerCase();
+
+        // True dependency resolution failures
+        if (lower.contains("could not resolve dependencies")) return true;
+        if (lower.contains("missing artifact")) return true;
+        if (lower.contains("was not found in") && lower.contains("repository")) return true;
+        if (lower.contains("failed to read artifact descriptor")) return true;
+        if (lower.contains("dependencyresolutionexception")) return true;
+
+        return false;
     }
 
-    public boolean fixPom(Path projectRoot, String testOutput, OllamaClient ollama) {
-        String prompt = prompts.buildPomPrompt(testOutput);
+    public boolean fixPom(Path projectRoot, String testOutput) {
+        String prompt = Texts.POM_PROMPT.formatted(testOutput);
         logger.accept("POM fix prompt:");
         logger.accept(prompt);
 
@@ -36,7 +69,9 @@ public class PomFixer {
             return false;
         }
 
-        new PomWriter(logger).addDependencies(projectRoot, depsXml);
+        PomWriter pomWriter = new PomWriter(logger);
+        pomWriter.addDependencies(projectRoot, depsXml);
+
         return true;
     }
 }
