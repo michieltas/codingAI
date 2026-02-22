@@ -1,6 +1,5 @@
 package nl.mihaly.main;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Consumer;
 
@@ -22,8 +21,8 @@ public class CodingAIAgent {
     private final OllamaClient ollama;
     private final JavaCodeExtractor extractor;
     private final ClassWriter writer;
-    private final PromptBuilder promptBuilder;
     private final PomFixer pomFixer;
+    private final TestSourceLoader testSourceLoader;
 
     public CodingAIAgent(Consumer<String> logger,
                          String specification,
@@ -39,8 +38,8 @@ public class CodingAIAgent {
         this.ollama = new OllamaClient(logger);
         this.extractor = new JavaCodeExtractor(logger);
         this.writer = new ClassWriter(logger);
-        this.promptBuilder = new PromptBuilder();
-        this.pomFixer = new PomFixer(logger, extractor, promptBuilder, className, packageName);
+        this.testSourceLoader = new TestSourceLoader(logger, packageName, className);
+        this.pomFixer = new PomFixer(logger, extractor, packageName, className);
     }
 
     /**
@@ -76,7 +75,7 @@ public class CodingAIAgent {
      */
     public boolean runTddLoop(Path projectRoot) {
         String lastTestOutput = "";
-        String testSource = loadTestSource(projectRoot);
+        String testSource = testSourceLoader.loadTestSource(projectRoot);
 
         for (int iteration = 1; iteration <= 30; iteration++) {
             logger.accept("=== Iteration " + iteration + " ===");
@@ -138,32 +137,6 @@ public class CodingAIAgent {
         logger.accept("Switching to deepseek-r1-70b for final attempt...");
 
         return runFallbackModel(projectRoot, lastTestOutput, testSource);
-    }
-
-    private String loadTestSource(Path projectRoot) {
-        try {
-            if (packageName == null || packageName.isBlank()) {
-                logger.accept("No package name provided, cannot locate test class reliably.");
-                return "";
-            }
-
-            Path testPath = projectRoot
-                    .resolve("src/test/java")
-                    .resolve(packageName.replace('.', '/'))
-                    .resolve(className + "Test.java");
-
-            if (Files.exists(testPath)) {
-                String src = Files.readString(testPath);
-                logger.accept("Loaded test class: " + testPath);
-                return src;
-            } else {
-                logger.accept("Test class not found: " + testPath);
-                return "";
-            }
-        } catch (Exception e) {
-            logger.accept("Failed to read test class: " + e.getMessage());
-            return "";
-        }
     }
 
     private boolean runFallbackModel(Path projectRoot, String testOutput, String testSource) {

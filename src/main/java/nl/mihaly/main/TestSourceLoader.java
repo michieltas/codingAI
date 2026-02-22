@@ -7,12 +7,16 @@ import java.util.function.Consumer;
 public class TestSourceLoader {
 
     private final Consumer<String> logger;
+    private final String packageName;
+    private final String className;
 
-    public TestSourceLoader(Consumer<String> logger) {
+    public TestSourceLoader(Consumer<String> logger, String packageName, String className) {
         this.logger = logger;
+        this.packageName = packageName;
+        this.className = className;
     }
 
-    public String load(Path projectRoot, String packageName, String className) {
+    public String loadTestSource(Path projectRoot) {
         try {
             if (packageName == null || packageName.isBlank()) {
                 logger.accept("No package name provided, cannot locate test class reliably.");

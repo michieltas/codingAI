@@ -8,22 +8,18 @@ public class PomFixer {
 
     private final Consumer<String> logger;
     private final JavaCodeExtractor extractor;
-    private final PromptBuilder prompts;
     private final OllamaClient ollama;
     private final String className;
     private final String packageName;
 
     public PomFixer(Consumer<String> logger,
                     JavaCodeExtractor extractor,
-                    PromptBuilder prompts,
-                    String className,
-                    String packageName) {
+                    String packageName, String className) {
         this.logger = logger;
         this.extractor = extractor;
-        this.prompts = prompts;
         this.ollama = new OllamaClient(logger);
-        this.className = className;
         this.packageName = packageName;
+        this.className = className;
     }
 
     /**
